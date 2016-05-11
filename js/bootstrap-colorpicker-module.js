@@ -2,6 +2,10 @@ angular.module('colorpicker.module', [])
     .factory('Helper', function () {
       'use strict';
       return {
+        // Method to check if the device is touch enabled
+        isMobile: function () {
+          return 'ontouchstart' in document.documentElement;
+        },
         closestSlider: function (elem) {
           var matchesSelector = elem.matches || elem.webkitMatchesSelector || elem.mozMatchesSelector || elem.msMatchesSelector;
           if (matchesSelector.bind(elem)('I')) {
@@ -204,26 +208,59 @@ angular.module('colorpicker.module', [])
           return slider;
         },
         getLeftPosition: function(event) {
-          return Math.max(0, Math.min(slider.maxLeft, slider.left + ((event.pageX || pointer.left) - pointer.left)));
+          // Check if touch device by checking the pageX node in the event - 
+          // for touch devices, pageX will be present only within touches array
+          var pointX;
+          if(event.pageX) {
+            pointX = event.pageX;
+          }
+          else {
+            pointX = event.touches[0].pageX;
+          }
+          return Math.max(0, Math.min(slider.maxLeft, slider.left + ((pointX || pointer.left) - pointer.left)));
         },
         getTopPosition: function(event) {
-          return Math.max(0, Math.min(slider.maxTop, slider.top + ((event.pageY || pointer.top) - pointer.top)));
+          // Check if touch device by checking the pageY node in the event - 
+          // for touch devices, pageY will be present only within touches array
+          var pointY;
+          if(event.pageY) {
+            pointY = event.pageY;
+          }
+          else {
+            pointY = event.touches[0].pageY;
+          }
+          return Math.max(0, Math.min(slider.maxTop, slider.top + ((pointY || pointer.top) - pointer.top)));
         },
         setSlider: function (event, fixedPosition) {
+          // Check if touch device by checking the pageX node in the event - 
+          // for touch devices, pageX will be present only within touches array
+          var clientX, clientY, pageX, pageY;
+          if(event.pageX) {
+            clientX = event.clientX;
+            clientY = event.clientY;
+            pageX = event.pageX;
+            pageY = event.pageY;
+          }
+          else {
+                clientX = event.touches[0].clientX,
+            clientY = event.touches[0].clientY;
+            pageX = event.touches[0].pageX;
+            pageY = event.touches[0].pageY;
+          }
           var
             target = Helper.closestSlider(event.target),
             targetOffset = Helper.getOffset(target, fixedPosition),
             rect = target.getBoundingClientRect(),
-            offsetX = event.clientX - rect.left,
-            offsetY = event.clientY - rect.top;
+            offsetX = clientX - rect.left,
+            offsetY = clientY - rect.top;
 
           slider.knob = target.children[0].style;
-          slider.left = event.pageX - targetOffset.left - window.pageXOffset + targetOffset.scrollX;
-          slider.top = event.pageY - targetOffset.top - window.pageYOffset + targetOffset.scrollY;
+          slider.left = pageX - targetOffset.left - window.pageXOffset + targetOffset.scrollX;
+          slider.top = pageY - targetOffset.top - window.pageYOffset + targetOffset.scrollY;
 
           pointer = {
-            left: event.pageX - (offsetX - slider.left),
-            top: event.pageY - (offsetY - slider.top)
+            left: pageX - (offsetX - slider.left),
+            top: pageY - (offsetY - slider.top)
           };
         },
         setSaturation: function(event, fixedPosition, componentSize) {
@@ -326,6 +363,12 @@ angular.module('colorpicker.module', [])
             $document.on('mouseup', mouseup);
           }
 
+          // Method for binding touch events
+          function bindTouchEvents() {
+            $document.on('touchmove', mousemove);
+            $document.on('touchend', mouseup);
+          }
+
           if (thisFormat === 'rgba') {
             colorpickerTemplate.addClass('alpha');
             sliderAlpha = colorpickerTemplate.find('colorpicker-alpha');
@@ -335,27 +378,58 @@ angular.module('colorpicker.module', [])
                   Slider.setAlpha(event, fixedPosition, componentSize);
                   mousemove(event);
                 })
+            if(Helper.isMobile()) {
+              sliderAlpha
+                .on('touchstart', function(event) {
+                  Slider.setAlpha(event, fixedPosition, componentSize);
+                  bindTouchEvents();
+                  return false;
+                })
+                .on('touchend', function(event){
+                  emitEvent('colorpicker-selected-alpha');
+                });
+            }
+            else {
+              sliderAlpha
                 .on('mousedown', function(event) {
                   Slider.setAlpha(event, fixedPosition, componentSize);
                   bindMouseEvents();
+                  return false;
                 })
                 .on('mouseup', function(event){
                   emitEvent('colorpicker-selected-alpha');
                 });
+            }
           }
 
           sliderHue
-              .on('click', function(event) {
+            .on('click', function(event) {
+              Slider.setHue(event, fixedPosition, componentSize);
+              mousemove(event);
+            })
+
+          if(Helper.isMobile()) {
+            sliderHue
+              .on('touchstart', function(event) {
                 Slider.setHue(event, fixedPosition, componentSize);
-                mousemove(event);
+                bindTouchEvents();
+                return false;
               })
+              .on('touchend', function(event){
+                emitEvent('colorpicker-selected-hue');
+              });
+          }
+          else {
+            sliderHue
               .on('mousedown', function(event) {
                 Slider.setHue(event, fixedPosition, componentSize);
                 bindMouseEvents();
+                return false;
               })
               .on('mouseup', function(event){
                 emitEvent('colorpicker-selected-hue');
               });
+          }
 
           sliderSaturation
               .on('click', function(event) {
@@ -365,13 +439,29 @@ angular.module('colorpicker.module', [])
                   hideColorpickerTemplate();
                 }
               })
+
+          if(Helper.isMobile()) {
+            sliderSaturation
+              .on('touchstart', function(event) {
+                Slider.setSaturation(event, fixedPosition, componentSize);
+                bindTouchEvents();
+                return false;
+              })
+              .on('touchend', function(event){
+                emitEvent('colorpicker-selected-saturation');
+              });
+          }
+          else {
+            sliderSaturation
               .on('mousedown', function(event) {
                 Slider.setSaturation(event, fixedPosition, componentSize);
                 bindMouseEvents();
+                return false;
               })
               .on('mouseup', function(event){
                 emitEvent('colorpicker-selected-saturation');
               });
+          }
 
           if (fixedPosition) {
             colorpickerTemplate.addClass('colorpicker-fixed-position');
@@ -442,6 +532,10 @@ angular.module('colorpicker.module', [])
             emitEvent('colorpicker-selected');
             $document.off('mousemove', mousemove);
             $document.off('mouseup', mouseup);
+
+            // Remove touch events as well
+            $document.off('touchmove', mousemove);
+            $document.off('touchend', mouseup);
           }
 
           function update(omitInnerInput) {
@@ -511,6 +605,9 @@ angular.module('colorpicker.module', [])
               if (inline === false) {
                 // register global mousedown event to hide the colorpicker
                 $document.on('mousedown', documentMousedownHandler);
+
+                // register golbal touchstart event to hide the colorpicker
+                $document.on('touchstart', documentMousedownHandler);
               }
 
               if (attrs.colorpickerIsOpen) {
@@ -533,6 +630,11 @@ angular.module('colorpicker.module', [])
             event.preventDefault();
           });
 
+          colorpickerTemplate.on('touchstart', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
+          });
+
           function emitEvent(name) {
             if (ngModel) {
               $scope.$emit(name, {
@@ -548,6 +650,8 @@ angular.module('colorpicker.module', [])
               emitEvent('colorpicker-closed');
               // unregister the global mousedown event
               $document.off('mousedown', documentMousedownHandler);
+              // unregister the global touchstart event
+              $document.off('touchstart', documentMousedownHandler);
 
               if (attrs.colorpickerIsOpen) {
                 $scope[attrs.colorpickerIsOpen] = false;
